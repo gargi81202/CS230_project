@@ -1,5 +1,5 @@
 # CS230_project
-This is the repository for our CS230 project on Cache hierarchy in Graph Analytics.
+This is the repository for our CS230 project on Cache Hierarchy in Graph Analytics.
 
 ### Members: 
 Gargi Bakshi \
