@@ -20,7 +20,7 @@ Here, the options are for the L1I, L1D, L2, LLC prefetchers and the LLC replacem
 ```
 ./build_champsim.sh bimodal no no no no lru 1
 ```
-* Now, we need to run the `run_champsim.sh` file:
+Now, we need to run the `run_champsim.sh` file:
 ```
 ./run_champsim.sh [BINARY] [N_WARM] [N_SIM] [TRACE] [OPTION]
 ```
@@ -31,4 +31,4 @@ Here, the options are for the L1I, L1D, L2, LLC prefetchers and the LLC replacem
 * There will be a `results-<num>M` folder created, which contains the results of the trace. Make sure to save these results to your machine, as it gets overwritten everytime.
 
 
-To use different cache policies, copy the cotents of the respective ```cache_*.cc``` files into the ```ChampSim/src/cache.cc```.
+To use different cache policies, copy the contents of the respective ```cache_*.cc``` files into the ```ChampSim/src/cache.cc```.
