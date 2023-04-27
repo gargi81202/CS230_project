@@ -1,0 +1,127 @@
+#include "cache.h"
+
+void CACHE::l2c_prefetcher_initialize() { cout << "CPU " << cpu << " L2C bo line prefetcher" << endl; }
+
+int CACHE::l2c_BO_get_offset()
+{
+    int offset = 1;
+    int score = offsetAndScore[1];
+    for (const auto &elem : offsetAndScore)
+    {
+        if (elem.second > score)
+        {
+            offset = elem.first;
+            score = elem.second;
+        }
+    }
+
+    return offset;
+}
+
+
+
+uint32_t CACHE::l2c_prefetcher_operate(
+    uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in) {
+
+    // uint8_t prefetch = 1; //0 - off     1-on
+
+    if (type != LOAD)
+        return metadata_in;
+    round++;
+    if (round == ROUND_MAX) offset = l2c_BO_get_offset();
+    else if (offsetAndScore.count(SCORE_MAX) > 0)
+    {
+        for (auto elem : offsetAndScore)
+            if (elem.second == SCORE_MAX)
+            {
+                offset = elem.first;
+                break;
+            }
+    }
+    if(offsetAndScore[offset] < BAD_SCORE) prefetch = 0;
+    else prefetch = 1;
+    uint64_t pf_addr = ((addr >> LOG2_BLOCK_SIZE) - offset) << LOG2_BLOCK_SIZE;
+
+    DP(if (warmup_complete[cpu]) {
+        cout << "[" << NAME << "] " << __func__ << hex << " base_cl: " << (addr >> LOG2_BLOCK_SIZE);
+        cout << " pf_cl: " << (pf_addr >> LOG2_BLOCK_SIZE) << " ip: " << ip << " cache_hit: " << +cache_hit
+             << " type: " << +type << endl;
+    });
+    if (right.size() == TABLE_SIZE) right.erase(right.begin());
+
+    if (prefetch==0) right.insert(addr);
+    else right.insert(pf_addr);
+
+    for(int i = 0; i < 46; i++)
+    {
+        if(right.find(((addr >> LOG2_BLOCK_SIZE) - offsets[i]) << LOG2_BLOCK_SIZE)!=right.end() || left.find(((addr >> LOG2_BLOCK_SIZE) - offsets[i]) << LOG2_BLOCK_SIZE)!=left.end()){
+            offsetAndScore[offsets[i]]++;
+        }
+    }
+    if(prefetch==1 || (prefetch==0 && cache_hit > -1) ){
+        if(QUEUE.size()>0){
+            vector<int> v;
+            for (auto elem : QUEUE)
+            {
+                if (elem.second - rdtsc() >= 60)
+                {
+                    if (left.size() == TABLE_SIZE) left.erase(left.begin());
+                    left.insert(elem.first);
+                    v.push_back(elem.first);
+                    // QUEUE.erase(elem.first);
+                    // cout << left.size() << ' ' << QUEUE.size() << endl;
+                }
+            }
+            for (int i = 0; i < v.size(); i++) QUEUE.erase(v[i]);
+        }
+
+        if (QUEUE.size() == QUEUE_SIZE)
+        {
+            if (left.size() == TABLE_SIZE) left.erase(left.begin());
+            int maxval = 0;
+            int indx = 0;
+            for (auto elem : QUEUE)
+            {
+                if(elem.second > maxval)
+                {
+                    maxval = elem.second;
+                    indx = elem.first;
+                }
+            }
+            
+            left.insert(indx);
+            QUEUE.erase(indx);
+        }
+
+        QUEUE[pf_addr] = rdtsc();
+    }
+
+
+    if(prefetch==1 || cache_hit > -1)
+    {
+        prev_llc = curr_llc;
+        curr_llc = rdtsc();
+         uint32_t delta = curr_llc - prev_llc;
+        gauge = gauge + delta - rate;
+        if( gauge >= upper_limit_gauge) rate++;
+        if( gauge <= lower_limit_gauge) rate--;
+
+        if(offsetAndScore[offset] >= LOW_SCORE || rate > 2*BW ) MSHR_thresh = 12;
+        else if (rate < BW) MSHR_thresh = 2;
+        else MSHR_thresh = 2+10*(rate - BW)/BW;
+    }
+
+
+    if (prefetch && MSHR_thresh < 12) prefetch_line(ip, addr, pf_addr, FILL_L2, 0);
+    return metadata_in;
+}
+
+uint32_t CACHE::l2c_prefetcher_cache_fill(
+    uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in) {
+    return metadata_in;
+}
+
+void CACHE::l2c_prefetcher_final_stats() { cout << "CPU " << cpu << " L2C bo prefetcher final stats" << endl; }
+
+
+
